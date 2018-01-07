@@ -20,11 +20,11 @@ public class ImageStorage {
     }
 
     public File getImageByHash(String hash) {
-
+        return null;
     }
 
     public File getImageByHash(String hash, int maxWidth, int maxHeight) {
-
+        return null;
     }
 
 }

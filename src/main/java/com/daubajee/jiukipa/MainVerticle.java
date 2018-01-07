@@ -12,6 +12,7 @@ import com.daubajee.jiukipa.model.Repository;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
+import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -20,6 +21,7 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Route;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
+import io.vertx.ext.web.handler.BodyHandler;
 
 public class MainVerticle extends AbstractVerticle {
 
@@ -29,7 +31,7 @@ public class MainVerticle extends AbstractVerticle {
 
     public MainVerticle() {
         repository = new Repository();
-        repository.init("/tmp/pics");
+        // repository.init("/tmp/pics");
     }
 
     @Override
@@ -38,10 +40,13 @@ public class MainVerticle extends AbstractVerticle {
 		
         Router router = Router.router(vertx);
         
+        router.route().handler(BodyHandler.create());
+
         Route imagesRoute = router.route().method(HttpMethod.GET)
                 .path("/images");
         
         Route postRoute = router.route().method(HttpMethod.POST).path("/image");
+
 
         imagesRoute.handler(context -> handleGetImages(context));
         postRoute.handler(context -> handlePostImage(context));
@@ -51,9 +56,15 @@ public class MainVerticle extends AbstractVerticle {
         System.out.println("HTTP server started on port 8080");
     }
 
-    private Object handlePostImage(RoutingContext context) {
-
-        return null;
+    private void handlePostImage(RoutingContext context) {
+        Buffer body = context.getBody();
+        byte[] bytes = body.getBytes();
+        System.out.println(new String(bytes));
+        HttpServerResponse response = context.response();
+        response.setChunked(true);
+        response.setStatusCode(201);
+        response.write("OK");
+        response.close();
     }
 
     private void handleGetImages(RoutingContext context) {

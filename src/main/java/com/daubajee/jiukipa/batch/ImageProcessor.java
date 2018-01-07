@@ -10,7 +10,7 @@ import com.google.common.hash.Hashing;
 public class ImageProcessor {
     JpegEXIFExtractor jpegEXIFExtractor = new JpegEXIFExtractor();
 
-    public void processImage(byte[] imageBuffer) {
+    public void processImage(byte[] imageBuffer) throws Exception {
         Map<String, String> metadata = jpegEXIFExtractor
                 .extract(new ByteArrayInputStream(imageBuffer));
 
