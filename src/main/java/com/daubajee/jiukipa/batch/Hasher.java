@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 
 import javax.imageio.ImageIO;
 
+import com.daubajee.jiukipa.image.JpegEXIFExtractor;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
