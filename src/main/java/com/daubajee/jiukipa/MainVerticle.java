@@ -7,10 +7,10 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
-import com.daubajee.jiukipa.batch.ImageProcessor;
+import com.daubajee.jiukipa.batch.Config;
+import com.daubajee.jiukipa.image.ImageStorage;
 import com.daubajee.jiukipa.model.ImageMeta;
 import com.daubajee.jiukipa.model.Repository;
-import com.google.common.hash.HashCode;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
@@ -31,13 +31,16 @@ public class MainVerticle extends AbstractVerticle {
 
     private Repository repository;
 
-    private ImageProcessor imageProcessor;
+    private ImageStorage imageStorage;
+
+    private Config config;
 
     public MainVerticle() {
         repository = new Repository();
         // repository.init("/tmp/pics");
 
-        imageProcessor = new ImageProcessor();
+        config = new Config();
+        imageStorage = new ImageStorage(config, vertx.eventBus());
     }
 
     @Override
@@ -64,11 +67,10 @@ public class MainVerticle extends AbstractVerticle {
 
     private void handlePostImage(RoutingContext context) {
         Buffer body = context.getBody();
-        byte[] bytes = body.getBytes();
+        byte[] jpegImageBytes = body.getBytes();
 
-        HashCode sha256 = imageProcessor.getSha256(bytes);
+        imageStorage.addNewImage(jpegImageBytes);
 
-        System.out.println(new String(bytes));
         HttpServerResponse response = context.response();
         response.setChunked(true);
         response.setStatusCode(201);

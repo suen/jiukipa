@@ -1,5 +1,6 @@
 package com.daubajee.jiukipa.image;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -9,13 +10,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.IntStream;
 
 import com.daubajee.jiukipa.EventTopics;
 import com.daubajee.jiukipa.batch.Config;
-import com.daubajee.jiukipa.model.ImageMeta;
 import com.google.common.hash.HashCode;
+import com.google.common.hash.HashFunction;
+import com.google.common.hash.Hashing;
 
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.json.JsonObject;
@@ -24,9 +25,9 @@ import io.vertx.core.logging.LoggerFactory;
 
 public class ImageStorage {
 
-    Map<String, ImageMeta> imageHash = new ConcurrentHashMap<>();
-
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageStorage.class);
+
+    private JpegEXIFExtractor jpegEXIFExtractor = new JpegEXIFExtractor();
 
     private Config config;
 
@@ -69,6 +70,17 @@ public class ImageStorage {
         }
     }
 
+    public void addNewImage(byte[] jpegImageBytes) {
+        HashCode hashSHA256 = toHashSHA256(jpegImageBytes);
+
+        try {
+            Map<String, String> metadata = extractMetaData(jpegImageBytes);
+            addNewImage(hashSHA256, jpegImageBytes, metadata);
+        } catch (ImageMetadataExtractionException e) {
+            throw new ImageWriteException("Write failed for : " + hashSHA256.toString(), e);
+        }
+    }
+
     public void addNewImage(HashCode imageHash, byte[] jpegImageBytes, Map<String, String> metadata) {
 
         String widthStr = getAttr(metadata, "tiff:ImageWidth");
@@ -101,6 +113,20 @@ public class ImageStorage {
             return Files.write(imagePath, jpegImageBytes, StandardOpenOption.CREATE_NEW);
         } catch (IOException e) {
             throw new ImageWriteException("Write failed for : " + imagePath.toString(), e);
+        }
+    }
+
+    public static HashCode toHashSHA256(byte[] bytes) {
+        HashFunction sha256 = Hashing.sha256();
+        HashCode hashBytes = sha256.hashBytes(bytes);
+        return hashBytes;
+    }
+
+    public Map<String, String> extractMetaData(byte[] jpegBytes) {
+        try {
+            return jpegEXIFExtractor.extract(new ByteArrayInputStream(jpegBytes));
+        } catch (Exception e) {
+            throw new ImageMetadataExtractionException("Metadata extraction failed ", e);
         }
     }
 
