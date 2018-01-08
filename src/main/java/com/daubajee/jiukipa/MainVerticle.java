@@ -11,7 +11,7 @@ import com.daubajee.jiukipa.batch.Config;
 import com.daubajee.jiukipa.image.ImageAlreadyExistsException;
 import com.daubajee.jiukipa.image.ImageStorage;
 import com.daubajee.jiukipa.model.ImageMeta;
-import com.daubajee.jiukipa.model.Repository;
+import com.daubajee.jiukipa.model.ImageMetaIndex;
 import com.google.common.base.Throwables;
 
 import io.vertx.core.AbstractVerticle;
@@ -32,7 +32,7 @@ public class MainVerticle extends AbstractVerticle {
 
     final SimpleDateFormat requestDateformat = new SimpleDateFormat("yyyy-MM-dd");
 
-    private Repository repository;
+    private ImageMetaIndex repository;
 
     private ImageStorage imageStorage;
 
@@ -41,8 +41,8 @@ public class MainVerticle extends AbstractVerticle {
     public MainVerticle(Vertx vertx) {
         config = new Config();
         EventBus eventBus = vertx.eventBus();
-        repository = new Repository(config, eventBus);
-        imageStorage = new ImageStorage(config, eventBus);
+        imageStorage = new ImageStorage(config, vertx);
+        repository = new ImageMetaIndex(eventBus);
         repository.init();
     }
 
@@ -108,6 +108,7 @@ public class MainVerticle extends AbstractVerticle {
         } catch (ParseException e) {
             response.putHeader("Content-type", "text/plain");
             response.write(e.getMessage());
+            response.close();
             return;
         }
 

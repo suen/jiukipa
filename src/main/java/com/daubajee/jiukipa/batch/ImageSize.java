@@ -64,6 +64,25 @@ public class ImageSize {
 		}
 	}
 
+    public static ImageSize getLeastSmallestStdSize(int width, int height) {
+        if (width > height) {
+            if (width >= FHD.width) {
+                return FHD;
+            }
+            if (width > SCREEN.width) {
+                return SCREEN;
+            }
+            return THUMBSNAIL;
+        } else {
+            if (width >= FHD_P.width) {
+                return FHD_P;
+            }
+            if (width > SCREEN_P.width) {
+                return SCREEN_P;
+            }
+            return THUMBSNAIL_P;
+        }
+    }
 	@Override
 	public String toString() {
 		return "ImageSize [width=" + width + ", height=" + height + ", landscape=" + landscape + "]";

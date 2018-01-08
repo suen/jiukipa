@@ -2,6 +2,7 @@ package com.daubajee.jiukipa.image;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -14,11 +15,14 @@ import java.util.stream.IntStream;
 
 import com.daubajee.jiukipa.EventTopics;
 import com.daubajee.jiukipa.batch.Config;
+import com.google.common.base.Charsets;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
 import com.google.common.hash.Hashing;
 
+import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -27,15 +31,22 @@ public class ImageStorage {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ImageStorage.class);
 
+
     private JpegEXIFExtractor jpegEXIFExtractor = new JpegEXIFExtractor();
+
+    final FileFilter filter = (File file) -> file.isDirectory()
+            || file.getName().endsWith(".meta");
 
     private Config config;
 
     private EventBus eventBus;
 
-    public ImageStorage(Config config, EventBus eventBus) {
+    private Vertx vertx;
+
+    public ImageStorage(Config config, Vertx vertx) {
         this.config = config;
-        this.eventBus = eventBus;
+        this.eventBus = vertx.eventBus();
+        this.vertx = vertx;
         init();
     }
 
@@ -46,6 +57,48 @@ public class ImageStorage {
 
         IntStream.range(1, numberOfParitions + 1)
                 .forEach(num -> createDirIfNotExists(Paths.get(imageRepoHome, partitionPrefix + num)));
+
+        eventBus.consumer(EventTopics.REQUEST_REPLAY_IMAGE_META,
+                message -> onReplayImageMeta(message));
+    }
+
+    private void onReplayImageMeta(Message<Object> message) {
+        String imageRepoHome = getImageRepoHome();
+        File imageRepoDir = new File(imageRepoHome);
+        LOGGER.info("Directory processing requested : " + message.body());
+        vertx.executeBlocking(future -> {
+            processDirectory(imageRepoDir);
+            future.complete();
+        }, res -> {
+            LOGGER.info("Directory processing done");
+        });
+    }
+
+    private void processDirectory(File dir) {
+        File[] files = dir.listFiles(filter);
+        for (File file : files) {
+            if (file.isFile()) {
+                try {
+                    JsonObject metaInfMap = extractImageMeta(file);
+                    eventBus.publish(EventTopics.REPLAY_IMAGE_META, metaInfMap);
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to extract meta file : " + file.getAbsolutePath(), e);
+                }
+            } else {
+                processDirectory(file);
+            }
+        }
+    }
+
+    private static JsonObject extractImageMeta(File file)
+            throws IOException {
+        byte[] bytes = Files.readAllBytes(file.toPath());
+        String str = new String(bytes, Charsets.UTF_8);
+        JsonObject json = new JsonObject(str);
+        String hashcode = file.getName().substring(0,
+                file.getName().length() - 5);
+        json.put("hashcode", hashcode);
+        return json;
     }
 
     private String getPartitionPrefix() {
@@ -92,10 +145,20 @@ public class ImageStorage {
         Path imagePath = addImageWithSize(imageHash, jpegImageBytes, exifWidth, exifHeight);
         Path metadataPath = addImagaMetaData(imageHash, metadata);
 
-        eventBus.publish(EventTopics.NEW_IMAGE, metadataPath.toString());
+        eventBus.publish(EventTopics.NEW_IMAGE_META, metadata);
 
         LOGGER.info("Image and metadata added : " + imagePath.toString() + ", " + metadataPath.toString());
     }
+
+
+
+    private String getHashCodePartitionDir(HashCode imageHash) {
+        int partition = selectPartition(getNumberOfPartitions(), imageHash);
+        String partitionDir = getPartitionPrefix() + partition;
+        return partitionDir;
+    }
+
+
 
     public Path addImageWithSize(HashCode imageHash, byte[] jpegImageBytes, int width, int height) {
         String widthXheight = String.format("%sx%s", width, height);

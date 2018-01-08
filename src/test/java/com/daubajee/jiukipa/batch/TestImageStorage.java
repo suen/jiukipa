@@ -17,7 +17,8 @@ public class TestImageStorage {
 
     @Test
     public void test() {
-        ImageStorage imageStorage = new ImageStorage(new Config(), Vertx.vertx().eventBus());
+        ImageStorage imageStorage = new ImageStorage(new Config(),
+                Vertx.vertx());
         
         Set<Integer> selectedNodes = new HashSet<>();
 
