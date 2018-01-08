@@ -151,7 +151,7 @@ public class ImageStorage {
 
     private static String getAttr(Map<String, String> imageMetadata, String attr) {
         String attrVal = imageMetadata.getOrDefault(attr, "");
-        if (!attrVal.isEmpty()) {
+        if (attrVal.isEmpty()) {
             throw new IllegalArgumentException("Metadata does not contain " + attrVal);
         }
         return attrVal;

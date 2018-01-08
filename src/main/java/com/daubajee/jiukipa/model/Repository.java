@@ -4,6 +4,7 @@ import java.io.File;
 import java.io.FileFilter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -42,7 +43,8 @@ public class Repository {
     }
 
     private void onNewImage(Message<Object> message) {
-        Path metafilePath = (Path) message.body();
+        String metafilePathStr = (String) message.body();
+        Path metafilePath = Paths.get(metafilePathStr);
         ImageMeta imageMeta = createImageMeta(metafilePath.toFile());
         images.add(imageMeta);
     }

@@ -8,9 +8,11 @@ import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import com.daubajee.jiukipa.batch.Config;
+import com.daubajee.jiukipa.image.ImageAlreadyExistsException;
 import com.daubajee.jiukipa.image.ImageStorage;
 import com.daubajee.jiukipa.model.ImageMeta;
 import com.daubajee.jiukipa.model.Repository;
+import com.google.common.base.Throwables;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
@@ -36,7 +38,7 @@ public class MainVerticle extends AbstractVerticle {
 
     private Config config;
 
-    public MainVerticle() {
+    public MainVerticle(Vertx vertx) {
         config = new Config();
         EventBus eventBus = vertx.eventBus();
         repository = new Repository(config, eventBus);
@@ -70,12 +72,26 @@ public class MainVerticle extends AbstractVerticle {
         Buffer body = context.getBody();
         byte[] jpegImageBytes = body.getBytes();
 
-        imageStorage.addNewImage(jpegImageBytes);
-
         HttpServerResponse response = context.response();
         response.setChunked(true);
+        response.putHeader("Content-type", "text/plain");
+
+        try {
+            imageStorage.addNewImage(jpegImageBytes);
+        } catch (ImageAlreadyExistsException e) {
+            response.setStatusCode(200);
+            response.write("Resource exists\n");
+            response.close();
+            return;
+        }
+        catch (Exception e) {
+            response.setStatusCode(500);
+            response.write(Throwables.getStackTraceAsString(e));
+            response.close();
+            return;
+        }
         response.setStatusCode(201);
-        response.write("OK");
+        response.write("Resource accepted\n");
         response.close();
     }
 
@@ -116,6 +132,6 @@ public class MainVerticle extends AbstractVerticle {
 
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
-        vertx.deployVerticle(new MainVerticle());
+        vertx.deployVerticle(new MainVerticle(vertx));
     }
 }
