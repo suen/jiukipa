@@ -69,7 +69,7 @@ public class ImageSize {
             if (width >= FHD.width) {
                 return FHD;
             }
-            if (width > SCREEN.width) {
+            if (width >= SCREEN.width) {
                 return SCREEN;
             }
             return THUMBSNAIL;
@@ -77,7 +77,7 @@ public class ImageSize {
             if (width >= FHD_P.width) {
                 return FHD_P;
             }
-            if (width > SCREEN_P.width) {
+            if (width >= SCREEN_P.width) {
                 return SCREEN_P;
             }
             return THUMBSNAIL_P;

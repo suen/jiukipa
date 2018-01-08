@@ -1,5 +1,6 @@
 package com.daubajee.jiukipa.image;
 
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileFilter;
@@ -13,8 +14,11 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.stream.IntStream;
 
+import javax.imageio.ImageIO;
+
 import com.daubajee.jiukipa.EventTopics;
 import com.daubajee.jiukipa.batch.Config;
+import com.daubajee.jiukipa.batch.ImageSize;
 import com.google.common.base.Charsets;
 import com.google.common.hash.HashCode;
 import com.google.common.hash.HashFunction;
@@ -26,6 +30,7 @@ import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
+import net.coobird.thumbnailator.Thumbnails;
 
 public class ImageStorage {
 
@@ -136,21 +141,68 @@ public class ImageStorage {
 
     public void addNewImage(HashCode imageHash, byte[] jpegImageBytes, Map<String, String> metadata) {
 
-        String widthStr = getAttr(metadata, "tiff:ImageWidth");
-        String heightStr = getAttr(metadata, "tiff:ImageLength");
+        Path imagePath = addImage(imageHash, jpegImageBytes);
+        
+        JsonObject json = toJson(metadata);
+        json.put("hashcode", imageHash.toString());
+        byte[] jsonBytes = json.toString().getBytes();
+        
+        addImagaMetaData(imageHash, jsonBytes);
 
-        int exifWidth = Integer.parseInt(widthStr);
-        int exifHeight = Integer.parseInt(heightStr);
+        eventBus.publish(EventTopics.NEW_IMAGE_META, json);
 
-        Path imagePath = addImageWithSize(imageHash, jpegImageBytes, exifWidth, exifHeight);
-        Path metadataPath = addImagaMetaData(imageHash, metadata);
-
-        eventBus.publish(EventTopics.NEW_IMAGE_META, metadata);
-
-        LOGGER.info("Image and metadata added : " + imagePath.toString() + ", " + metadataPath.toString());
+        LOGGER.info("Image and metadata added : " + imagePath.toString());
     }
 
+    public Path addImage(HashCode imageHash, byte[] jpegImageBytes) {
+        int selectedPartition = selectPartition(getNumberOfPartitions(),
+                imageHash);
+        String imageFileName = imageHash.toString() + ".JPG";
+        String partitionDir = getPartitionPrefix() + selectedPartition;
+        Path imagePath = Paths.get(getImageRepoHome(), partitionDir,
+                imageFileName);
 
+        File imageFile = imagePath.toFile();
+        if (imageFile.exists()) {
+            throw new ImageAlreadyExistsException(imageFileName
+                    + " already exists at " + imagePath.getParent().toString());
+        }
+        try {
+            return Files.write(imagePath, jpegImageBytes,
+                    StandardOpenOption.CREATE_NEW);
+        } catch (IOException e) {
+            throw new ImageWriteException(
+                    "Write failed for : " + imagePath.toString(), e);
+        }
+    }
+
+    public Path getImage(HashCode imageHash, int width, int height) {
+
+        ImageSize stdSize = ImageSize.getLeastSmallestStdSize(width, height);
+
+        String partitionDir = getHashCodePartitionDir(imageHash);
+        int stdwidth = stdSize.getWidth();
+        int stdheight = stdSize.getHeight();
+        String widthXheight = String.format("%dx%d", stdwidth, stdheight);
+        String resizedImageFileName = imageHash.toString() + "_" + widthXheight
+                + ".JPG";
+        Path filepath = Paths.get(getImageRepoHome(), partitionDir,
+                resizedImageFileName);
+
+        if (filepath.toFile().exists()) {
+            return filepath;
+        }
+        Path originalImagepath = Paths.get(getImageRepoHome(), partitionDir,
+                imageHash + ".JPG");
+
+        try {
+            addReizedImage(originalImagepath, stdwidth, stdheight, filepath);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return filepath;
+    }
 
     private String getHashCodePartitionDir(HashCode imageHash) {
         int partition = selectPartition(getNumberOfPartitions(), imageHash);
@@ -158,34 +210,21 @@ public class ImageStorage {
         return partitionDir;
     }
 
-
-
-    public Path addImageWithSize(HashCode imageHash, byte[] jpegImageBytes, int width, int height) {
-        String widthXheight = String.format("%sx%s", width, height);
-        int selectedPartition = selectPartition(getNumberOfPartitions(), imageHash);
-        String imageFileName = imageHash.toString() + "_" + widthXheight + ".JPG";
-        String partitionDir = getPartitionPrefix() + selectedPartition;
-        Path imagePath = Paths.get(getImageRepoHome(), partitionDir, imageFileName);
-
-        File imageFile = imagePath.toFile();
-        if (imageFile.exists()) {
-            throw new ImageAlreadyExistsException(
-                    imageFileName + " already exists at " + imagePath.getParent().toString());
-        }
-        try {
-            return Files.write(imagePath, jpegImageBytes, StandardOpenOption.CREATE_NEW);
-        } catch (IOException e) {
-            throw new ImageWriteException("Write failed for : " + imagePath.toString(), e);
-        }
+    private static void addReizedImage(Path originalImagePath, int width,
+            int height, Path filepath) throws IOException {
+        byte[] imageBytes = Files.readAllBytes(originalImagePath);
+        BufferedImage image = ImageIO
+                .read(new ByteArrayInputStream(imageBytes));
+        Thumbnails.of(image).size(width, height).toFile(filepath.toFile());
     }
 
-    public static HashCode toHashSHA256(byte[] bytes) {
+    private static HashCode toHashSHA256(byte[] bytes) {
         HashFunction sha256 = Hashing.sha256();
         HashCode hashBytes = sha256.hashBytes(bytes);
         return hashBytes;
     }
 
-    public Map<String, String> extractMetaData(byte[] jpegBytes) {
+    private Map<String, String> extractMetaData(byte[] jpegBytes) {
         try {
             return jpegEXIFExtractor.extract(new ByteArrayInputStream(jpegBytes));
         } catch (Exception e) {
@@ -193,11 +232,10 @@ public class ImageStorage {
         }
     }
 
-    private Path addImagaMetaData(HashCode imageHash, Map<String, String> metadata) {
+    private Path addImagaMetaData(HashCode imageHash, byte[] jsonBytes) {
         int selectedPartition = selectPartition(getNumberOfPartitions(), imageHash);
         String partitionDir = getPartitionPrefix() + selectedPartition;
         Path metaFilePath = Paths.get(getImageRepoHome(), partitionDir, imageHash.toString() + ".meta");
-        byte[] jsonBytes = getJsonBytes(metadata);
 
         try {
             return Files.write(metaFilePath, jsonBytes, StandardOpenOption.CREATE_NEW);
@@ -206,18 +244,10 @@ public class ImageStorage {
         }
     }
 
-    private static byte[] getJsonBytes(Map<String, String> metadata) {
+    private static JsonObject toJson(Map<String, String> metadata) {
         JsonObject json = new JsonObject();
         metadata.entrySet().forEach(entry -> json.put(entry.getKey(), entry.getValue()));
-        return json.toString().getBytes();
-    }
-
-    private static String getAttr(Map<String, String> imageMetadata, String attr) {
-        String attrVal = imageMetadata.getOrDefault(attr, "");
-        if (attrVal.isEmpty()) {
-            throw new IllegalArgumentException("Metadata does not contain " + attrVal);
-        }
-        return attrVal;
+        return json;
     }
 
     public static int selectPartition(int numberOfPartitions, HashCode hashcode) {

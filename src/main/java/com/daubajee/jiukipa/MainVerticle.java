@@ -1,5 +1,6 @@
 package com.daubajee.jiukipa;
 
+import java.nio.file.Path;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -13,6 +14,7 @@ import com.daubajee.jiukipa.image.ImageStorage;
 import com.daubajee.jiukipa.model.ImageMeta;
 import com.daubajee.jiukipa.model.ImageMetaIndex;
 import com.google.common.base.Throwables;
+import com.google.common.hash.HashCode;
 
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
@@ -23,12 +25,16 @@ import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
-import io.vertx.ext.web.Route;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 import io.vertx.ext.web.Router;
 import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.StaticHandler;
 
 public class MainVerticle extends AbstractVerticle {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
 
     final SimpleDateFormat requestDateformat = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -37,6 +43,9 @@ public class MainVerticle extends AbstractVerticle {
     private ImageStorage imageStorage;
 
     private Config config;
+
+    StaticHandler staticHandler;
+
 
     public MainVerticle(Vertx vertx) {
         config = new Config();
@@ -52,21 +61,29 @@ public class MainVerticle extends AbstractVerticle {
 		
         Router router = Router.router(vertx);
         
+        staticHandler = StaticHandler.create();
+        staticHandler.setWebRoot(config.imageRepoHome());
+
         router.route().handler(BodyHandler.create());
 
-        Route imagesRoute = router.route().method(HttpMethod.GET)
-                .path("/images");
+        router.route().method(HttpMethod.GET)
+                .path("/images").handler(context -> handleGetImages(context));
+
+        router.route().method(HttpMethod.GET)
+                .path("/image/:imageHash/:width/:height")
+                .handler(context -> handleGetImageByHash(context));
         
-        Route postRoute = router.route().method(HttpMethod.POST).path("/image");
+        router.route().method(HttpMethod.GET).path("/static/*")
+                .handler(staticHandler);
 
-
-        imagesRoute.handler(context -> handleGetImages(context));
-        postRoute.handler(context -> handlePostImage(context));
+        router.route().method(HttpMethod.POST).path("/image")
+                .handler(context -> handlePostImage(context));
 
         httpServer.requestHandler(router::accept);
         httpServer.listen(8080);
         System.out.println("HTTP server started on port 8080");
     }
+
 
     private void handlePostImage(RoutingContext context) {
         Buffer body = context.getBody();
@@ -129,6 +146,38 @@ public class MainVerticle extends AbstractVerticle {
         response.setChunked(true);
         response.write(reply.toString());
         response.close();
+    }
+
+    private void handleGetImageByHash(RoutingContext context) {
+        String reqImageHash = context.request().getParam("imageHash");
+        String reqMaxWidth = context.request().getParam("width");
+        String reqMaxHeight = context.request().getParam("height");
+
+        HashCode hashCode;
+        int width;
+        int height;
+        try {
+            hashCode = HashCode.fromString(reqImageHash);
+            width = Integer.parseInt(reqMaxWidth);
+            height = Integer.parseInt(reqMaxHeight);
+        } catch (Exception e) {
+            HttpServerResponse response = context.response();
+            response.setChunked(true);
+            response.putHeader("Content-Type", "text/plain");
+            response.setStatusCode(400);
+            response.write(e.getMessage());
+            response.close();
+            return;
+        }
+
+        Path imagePath = imageStorage.getImage(hashCode, width, height);
+
+        String fileName = imagePath.getFileName().toString();
+        String dir = imagePath.getParent().getFileName().toString();
+        
+        String rerouteUri = "/static/" + dir + "/" + fileName;
+        LOGGER.info("Reoute " + rerouteUri);
+        context.reroute(rerouteUri);
     }
 
     public static void main(String[] args) {

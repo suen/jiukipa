@@ -3,7 +3,7 @@ package com.daubajee.jiukipa.batch;
 public class Config {
 
     public String imageRepoHome() {
-        return "/tmp/pics";
+        return "imgs";
     }
 
     public int numberOfParition() {
