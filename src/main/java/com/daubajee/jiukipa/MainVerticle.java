@@ -15,6 +15,7 @@ import com.daubajee.jiukipa.model.Repository;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -36,11 +37,11 @@ public class MainVerticle extends AbstractVerticle {
     private Config config;
 
     public MainVerticle() {
-        repository = new Repository();
-        // repository.init("/tmp/pics");
-
         config = new Config();
-        imageStorage = new ImageStorage(config, vertx.eventBus());
+        EventBus eventBus = vertx.eventBus();
+        repository = new Repository(config, eventBus);
+        imageStorage = new ImageStorage(config, eventBus);
+        repository.init();
     }
 
     @Override
