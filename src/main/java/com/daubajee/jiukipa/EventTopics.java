@@ -10,4 +10,6 @@ public final class EventTopics {
 
     public static String IMAGE_GET_SIZE = "IMAGE_GET_SIZE";
 
+    public static String EVENT_STREAM = "EVENT_STREAM";
+
 }
