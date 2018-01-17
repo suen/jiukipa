@@ -78,7 +78,7 @@ public class MainVerticle extends AbstractVerticle {
                 .path("/image/:imageHash/:width/:height")
                 .handler(context -> handleGetImageByHash(context));
         
-        router.route().method(HttpMethod.POST).path("/image/:imageHash/addMetaData").handler(this::handlePostMetaData);
+        router.route().method(HttpMethod.POST).path("/image/:imageHash/addMetadata").handler(this::handlePostMetaData);
 
         router.route().method(HttpMethod.GET).path("/static/*")
                 .handler(staticHandler);
