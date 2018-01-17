@@ -5,6 +5,7 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -14,7 +15,6 @@ import com.daubajee.jiukipa.batch.Config;
 import com.daubajee.jiukipa.image.ImageAlreadyExistsException;
 import com.daubajee.jiukipa.image.ImageStorage;
 import com.daubajee.jiukipa.model.ImageMeta;
-import com.daubajee.jiukipa.model.ImageMetaIndex;
 import com.google.common.base.Throwables;
 import com.google.common.hash.HashCode;
 
@@ -23,6 +23,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
+import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
@@ -41,8 +42,6 @@ public class MainVerticle extends AbstractVerticle {
 
     final SimpleDateFormat requestDateformat = new SimpleDateFormat("yyyy-MM-dd");
 
-    private ImageMetaIndex repository;
-
     private ImageStorage imageStorage;
 
     private Config config;
@@ -53,10 +52,7 @@ public class MainVerticle extends AbstractVerticle {
 
     public MainVerticle(Vertx vertx) {
         config = new Config();
-        EventBus eventBus = vertx.eventBus();
         imageStorage = new ImageStorage(config, vertx);
-        repository = new ImageMetaIndex(eventBus);
-        repository.init();
     }
 
     @Override
@@ -120,39 +116,47 @@ public class MainVerticle extends AbstractVerticle {
     }
 
     private void handleGetImages(RoutingContext context) {
+        HttpServerResponse response = context.response();
+        
         String beginDateStr = context.request().getParam("beginDate");
         String endDateStr = context.request().getParam("endDate");
 
-        Date beginDate;
-        Date endDate;
-        HttpServerResponse response = context.response();
         try {
-            beginDate = requestDateformat.parse(beginDateStr);
-            endDate = requestDateformat.parse(endDateStr);
-        } catch (ParseException e) {
+            JsonObject dateParam = Optional.ofNullable(beginDateStr)
+                .flatMap(bdateStr -> Optional
+                        .ofNullable(endDateStr)
+                        .map(eDateStr -> {
+                            try {
+                                long beginDate = requestDateformat.parse(bdateStr).getTime();
+                                long endDate = requestDateformat.parse(eDateStr).getTime();
+                                return new JsonObject().put("beginDate", beginDate).put("endDate", endDate);
+                            } catch (ParseException e) {
+                                throw new IllegalArgumentException(e);
+                            }
+                        }))
+                        .orElse(new JsonObject());
+
+            eventBus.send(EventTopics.GET_IMAGE_META, dateParam, reply -> {
+                if (reply.failed()){
+                    response.setStatusCode(500);
+                    response.close();
+                    return;
+                }
+                
+                Message<Object> result = reply.result();
+                JsonObject resultJson = (JsonObject) result.body();
+                
+                response.putHeader("Content-Type", "application/json");
+                response.setChunked(true);
+                response.write(resultJson.toString());
+                response.close();
+            });
+        } catch (Exception e) {
             response.putHeader("Content-type", "text/plain");
             response.write(e.getMessage());
             response.close();
-            return;
         }
-
-        Predicate<? super ImageMeta> filterPredicate = img -> {
-            return img.getDateCreation().getTime() >= beginDate.getTime() && 
-                    img.getDateCreation().getTime() <= endDate
-                                .getTime();
-        };
-
-        List<JsonObject> filtered = repository.getImages().stream()
-            .filter(filterPredicate)
-            .map(img -> img.toJson())
-            .collect(Collectors.toList());
-        JsonObject reply = new JsonObject().put("images",
-                new JsonArray(filtered));
-
-        response.putHeader("Content-Type", "application/json");
-        response.setChunked(true);
-        response.write(reply.toString());
-        response.close();
+   
     }
 
     private void handleGetImageByHash(RoutingContext context) {

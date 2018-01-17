@@ -12,4 +12,5 @@ public final class EventTopics {
 
     public static String EVENT_STREAM = "EVENT_STREAM";
 
+    public static String GET_IMAGE_META = "GET_IMAGE_META";
 }
