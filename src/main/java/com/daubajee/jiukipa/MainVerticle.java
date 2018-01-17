@@ -8,6 +8,8 @@ import java.util.List;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import org.apache.http.HttpStatus;
+
 import com.daubajee.jiukipa.batch.Config;
 import com.daubajee.jiukipa.image.ImageAlreadyExistsException;
 import com.daubajee.jiukipa.image.ImageStorage;
@@ -19,6 +21,7 @@ import com.google.common.hash.HashCode;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
+import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
@@ -46,6 +49,7 @@ public class MainVerticle extends AbstractVerticle {
 
     StaticHandler staticHandler;
 
+    private EventBus eventBus;
 
     public MainVerticle(Vertx vertx) {
         config = new Config();
@@ -57,6 +61,7 @@ public class MainVerticle extends AbstractVerticle {
 
     @Override
     public void start() throws Exception {
+        eventBus = vertx.eventBus();
         HttpServer httpServer = vertx.createHttpServer();
 		
         Router router = Router.router(vertx);
@@ -73,6 +78,8 @@ public class MainVerticle extends AbstractVerticle {
                 .path("/image/:imageHash/:width/:height")
                 .handler(context -> handleGetImageByHash(context));
         
+        router.route().method(HttpMethod.POST).path("/image/:imageHash/addMetaData").handler(this::handlePostMetaData);
+
         router.route().method(HttpMethod.GET).path("/static/*")
                 .handler(staticHandler);
 
@@ -178,6 +185,23 @@ public class MainVerticle extends AbstractVerticle {
         String rerouteUri = "/static/" + dir + "/" + fileName;
         LOGGER.info("Reoute " + rerouteUri);
         context.reroute(rerouteUri);
+    }
+
+    private void handlePostMetaData(RoutingContext context) {
+        String imageHash = context.request().getParam("imageHash");
+
+        JsonObject metaJson = context.getBodyAsJson();
+        JsonObject eventdata = new JsonObject()
+            .put("hash", imageHash)
+            .put("metaData", metaJson);
+        Event event = new Event(Event.ADD_METADATA, eventdata);
+        DeliveryOptions options = new DeliveryOptions();
+        eventBus.publish(EventTopics.EVENT_STREAM, event.toJson(), options);
+        HttpServerResponse response = context.response();
+
+        response.setStatusCode(HttpStatus.SC_ACCEPTED);
+        response.setStatusMessage("ACCEPTED");
+        response.close();
     }
 
     public static void main(String[] args) {
