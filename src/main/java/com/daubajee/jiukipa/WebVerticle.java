@@ -61,8 +61,10 @@ public class WebVerticle extends AbstractVerticle {
                 .path("/images").handler(context -> handleGetImages(context));
 
         router.route().method(HttpMethod.GET)
-                .path("/image/:imageHash/:width/:height")
+                .path("/image/:imageHash/size/:width/:height")
                 .handler(context -> handleGetImageByHash(context));
+        router.route().method(HttpMethod.GET).path("/image/:imageHash/stdsize/:sizeName")
+                .handler(context -> handleGetImageByHashStdSize(context));
         
         router.route().method(HttpMethod.POST).path("/image/:imageHash/addMetadata").handler(this::handlePostMetaData);
 
@@ -74,7 +76,7 @@ public class WebVerticle extends AbstractVerticle {
 
         httpServer.requestHandler(router::accept);
         httpServer.listen(8080);
-        System.out.println("HTTP server started on port 8080");
+        LOGGER.info("HTTP server started on port 8080");
     }
 
 
@@ -166,10 +168,11 @@ public class WebVerticle extends AbstractVerticle {
             height = Integer.parseInt(reqMaxHeight);
         } catch (Exception e) {
             HttpServerResponse response = context.response();
-            response.setChunked(true);
+            String message = "Resource not found : " + e.getMessage();
+            response.setStatusCode(404);
             response.putHeader("Content-Type", "text/plain");
-            response.setStatusCode(400);
-            response.write(e.getMessage());
+            response.putHeader("Content-Length", String.valueOf(message.length()));
+            response.write(message);
             response.close();
             return;
         }
@@ -179,6 +182,32 @@ public class WebVerticle extends AbstractVerticle {
         String fileName = imagePath.getFileName().toString();
         String dir = imagePath.getParent().getFileName().toString();
         
+        String rerouteUri = "/static/" + dir + "/" + fileName;
+        LOGGER.info("Reoute " + rerouteUri);
+        context.reroute(rerouteUri);
+    }
+
+    private void handleGetImageByHashStdSize(RoutingContext context) {
+        String reqImageHash = context.request().getParam("imageHash");
+        String reqSizeName = context.request().getParam("sizeName");
+
+        HashCode hashCode;
+        try {
+            hashCode = HashCode.fromString(reqImageHash);
+        } catch (Exception e) {
+            HttpServerResponse response = context.response();
+            response.setChunked(true);
+            response.putHeader("Content-Type", "text/plain");
+            response.setStatusCode(400);
+            response.write(e.getMessage());
+            response.close();
+            return;
+        }
+
+        Path imagePath = imageStorage.getImageByStdSize(hashCode, reqSizeName);
+        String fileName = imagePath.getFileName().toString();
+        String dir = imagePath.getParent().getFileName().toString();
+
         String rerouteUri = "/static/" + dir + "/" + fileName;
         LOGGER.info("Reoute " + rerouteUri);
         context.reroute(rerouteUri);

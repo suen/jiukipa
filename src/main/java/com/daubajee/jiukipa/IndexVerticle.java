@@ -15,16 +15,21 @@ import com.daubajee.jiukipa.model.ImageMetaIndex;
 import com.google.common.collect.Sets;
 
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.TimeoutStream;
 import io.vertx.core.eventbus.EventBus;
 import io.vertx.core.eventbus.Message;
 import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 
 public class IndexVerticle extends AbstractVerticle {
 
     private ImageMetaIndex index;
 
     final Predicate<? super ImageMeta> alwaysTrue = img -> true;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(IndexVerticle.class);
 
     @Override
     public void start() throws Exception {
@@ -41,10 +46,15 @@ public class IndexVerticle extends AbstractVerticle {
         eventBus.consumer(EventTopics.IMAGE_GET_SIZE,
                 message -> onGetSize(message));
 
-        if (index.getImages().isEmpty()) {
-            eventBus.send(EventTopics.REQUEST_REPLAY_IMAGE_META,
-                    "IMAGE_META_INDEX");
-        }
+        TimeoutStream periodicStream = vertx.periodicStream(1000);
+        periodicStream.handler(tick -> {
+            if (index.getImages().isEmpty()) {
+                LOGGER.info("ImageMeta index is empty, sending REQUEST_REPLAY_IMAGE_META");
+                eventBus.publish(EventTopics.REQUEST_REPLAY_IMAGE_META, "IMAGE_META_INDEX");
+            } else {
+                periodicStream.cancel();
+            }
+        });
 
         eventBus.consumer(EventTopics.EVENT_STREAM, this::onEvent);
         

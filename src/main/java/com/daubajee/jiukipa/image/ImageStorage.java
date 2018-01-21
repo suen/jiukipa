@@ -11,8 +11,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import javax.imageio.ImageIO;
 
@@ -72,7 +76,9 @@ public class ImageStorage {
         File imageRepoDir = new File(imageRepoHome);
         LOGGER.info("Directory processing requested : " + message.body());
         vertx.executeBlocking(future -> {
-            processDirectory(imageRepoDir);
+            List<String> imageMetaPaths = scanDirForImageMetas(imageRepoDir);
+            LOGGER.info("Image Metas in the directory : " + imageMetaPaths.size());
+            broadcastImageMetas(imageMetaPaths);
             future.complete();
         }, res -> {
             LOGGER.info("Directory processing done");
@@ -93,6 +99,35 @@ public class ImageStorage {
                 processDirectory(file);
             }
         }
+    }
+    
+    private List<String> scanDirForImageMetas(File dir){
+        File[] files = dir.listFiles(filter);
+        return Arrays.asList(files)
+            .stream()
+            .flatMap(file -> {
+                if (file.isFile()) {
+                    return Stream.of(file.getAbsolutePath());
+                }
+                return scanDirForImageMetas(file).stream();
+            })
+            .collect(Collectors.toList());
+    }
+
+    private void broadcastImageMetas(List<String> imageMetaPathStrs) {
+        imageMetaPathStrs.forEach(imageMetaPathStr -> {
+            File file = Paths.get(imageMetaPathStr).toFile();
+            if (file.isFile()) {
+                try {
+                    JsonObject metaInfMap = extractImageMeta(file);
+                    eventBus.publish(EventTopics.REPLAY_IMAGE_META, metaInfMap);
+                } catch (IOException e) {
+                    LOGGER.error("Failed to extract meta file : " + file.getAbsolutePath(), e);
+                }
+            } else {
+                LOGGER.warn("Not a meta file : " + file.getAbsolutePath());
+            }
+        });
     }
 
     private static JsonObject extractImageMeta(File file)
@@ -177,9 +212,16 @@ public class ImageStorage {
     }
 
     public Path getImage(HashCode imageHash, int width, int height) {
-
         ImageSize stdSize = ImageSize.getLeastSmallestStdSize(width, height);
+        return getImageByStdSize(imageHash, stdSize);
+    }
 
+    public Path getImageByStdSize(HashCode imageHash, String sizeName) {
+        ImageSize stdSize = ImageSize.getStandardImageSizeByName(sizeName);
+        return getImageByStdSize(imageHash, stdSize);
+    }
+
+    private Path getImageByStdSize(HashCode imageHash, ImageSize stdSize) {
         String partitionDir = getHashCodePartitionDir(imageHash);
         int stdwidth = stdSize.getWidth();
         int stdheight = stdSize.getHeight();
@@ -198,9 +240,8 @@ public class ImageStorage {
         try {
             addReizedImage(originalImagepath, stdwidth, stdheight, filepath);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new IllegalStateException(e);
         }
-
         return filepath;
     }
 

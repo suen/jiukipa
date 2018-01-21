@@ -12,10 +12,10 @@ public class ImageSize {
 	
 	private final boolean landscape;
 	
-	public static final ImageSize THUMBSNAIL = new ImageSize(80, 60); 
+    public static final ImageSize THUMBSNAIL = new ImageSize(400, 300);
 	public static final ImageSize SCREEN = new ImageSize(1024, 768); 
 	public static final ImageSize FHD = new ImageSize(1920, 1440); 
-	public static final ImageSize THUMBSNAIL_P = new ImageSize(60, 80); 
+    public static final ImageSize THUMBSNAIL_P = new ImageSize(300, 400);
 	public static final ImageSize SCREEN_P = new ImageSize(768, 1024); 
 	public static final ImageSize FHD_P = new ImageSize(1440, 1920); 
 	
@@ -83,6 +83,20 @@ public class ImageSize {
             return THUMBSNAIL_P;
         }
     }
+
+    public static ImageSize getStandardImageSizeByName(String name) {
+        switch (name.toUpperCase()) {
+            case "THUMBSNAIL" :
+                return THUMBSNAIL;
+            case "SCREEN" :
+                return SCREEN;
+            case "FHD" :
+                return FHD;
+            default :
+                return THUMBSNAIL;
+        }
+    }
+
 	@Override
 	public String toString() {
 		return "ImageSize [width=" + width + ", height=" + height + ", landscape=" + landscape + "]";
