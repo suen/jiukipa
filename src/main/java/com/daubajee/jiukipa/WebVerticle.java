@@ -3,23 +3,17 @@ package com.daubajee.jiukipa;
 import java.nio.file.Path;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.List;
 import java.util.Optional;
-import java.util.function.Predicate;
-import java.util.stream.Collectors;
 
 import org.apache.http.HttpStatus;
 
 import com.daubajee.jiukipa.batch.Config;
 import com.daubajee.jiukipa.image.ImageAlreadyExistsException;
 import com.daubajee.jiukipa.image.ImageStorage;
-import com.daubajee.jiukipa.model.ImageMeta;
 import com.google.common.base.Throwables;
 import com.google.common.hash.HashCode;
 
 import io.vertx.core.AbstractVerticle;
-import io.vertx.core.Vertx;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.eventbus.DeliveryOptions;
 import io.vertx.core.eventbus.EventBus;
@@ -27,7 +21,6 @@ import io.vertx.core.eventbus.Message;
 import io.vertx.core.http.HttpMethod;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.http.HttpServerResponse;
-import io.vertx.core.json.JsonArray;
 import io.vertx.core.json.JsonObject;
 import io.vertx.core.logging.Logger;
 import io.vertx.core.logging.LoggerFactory;
@@ -36,9 +29,9 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.StaticHandler;
 
-public class MainVerticle extends AbstractVerticle {
+public class WebVerticle extends AbstractVerticle {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(MainVerticle.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(WebVerticle.class);
 
     final SimpleDateFormat requestDateformat = new SimpleDateFormat("yyyy-MM-dd");
 
@@ -50,13 +43,10 @@ public class MainVerticle extends AbstractVerticle {
 
     private EventBus eventBus;
 
-    public MainVerticle(Vertx vertx) {
-        config = new Config();
-        imageStorage = new ImageStorage(config, vertx);
-    }
-
     @Override
     public void start() throws Exception {
+        config = new Config();
+        imageStorage = new ImageStorage(config, vertx);
         eventBus = vertx.eventBus();
         HttpServer httpServer = vertx.createHttpServer();
 		
@@ -142,6 +132,7 @@ public class MainVerticle extends AbstractVerticle {
                     response.close();
                     return;
                 }
+                LOGGER.info("GET_IMAGE_META response received");
                 
                 Message<Object> result = reply.result();
                 JsonObject resultJson = (JsonObject) result.body();
@@ -151,6 +142,8 @@ public class MainVerticle extends AbstractVerticle {
                 response.write(resultJson.toString());
                 response.close();
             });
+            LOGGER.info("GET_IMAGE_META sent, waiting response");
+
         } catch (Exception e) {
             response.putHeader("Content-type", "text/plain");
             response.write(e.getMessage());
@@ -208,8 +201,4 @@ public class MainVerticle extends AbstractVerticle {
         response.close();
     }
 
-    public static void main(String[] args) {
-        Vertx vertx = Vertx.vertx();
-        vertx.deployVerticle(new MainVerticle(vertx));
-    }
 }
