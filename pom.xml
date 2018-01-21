@@ -56,34 +56,24 @@
 							<artifactSet>
 							</artifactSet>
 							<outputFile>${project.build.directory}/${project.artifactId}-${project.version}-fat.jar</outputFile>
+							<filters>
+								<filter>
+									<artifact>*:*</artifact>
+									<excludes>
+										<exclude>META-INF/*.SF</exclude>
+										<exclude>META-INF/*.DSA</exclude>
+										<exclude>META-INF/*.RSA</exclude>
+									</excludes>
+								</filter>
+							</filters>
 						</configuration>
 					</execution>
 				</executions>
 			</plugin>
-
-			<plugin>
-				<groupId>org.codehaus.mojo</groupId>
-				<artifactId>exec-maven-plugin</artifactId>
-				<version>1.5.0</version>
-				<configuration>
-					<mainClass>io.vertx.core.Launcher</mainClass>
-					<arguments>
-						<argument>run</argument>
-						<argument>com.daubajee.jiukipa-backend.MainVerticle</argument>
-					</arguments>
-				</configuration>
-			</plugin>
-
 		</plugins>
 	</build>
 
 	<dependencies>
-
-		<dependency>
-			<groupId>io.vertx</groupId>
-			<artifactId>vertx-unit</artifactId>
-			<version>${vertx.version}</version>
-		</dependency>
 
 		<dependency>
 			<groupId>io.vertx</groupId>
@@ -96,6 +86,13 @@
 			<artifactId>vertx-web</artifactId>
 			<version>${vertx.version}</version>
 		</dependency>
+		
+		<dependency>
+			<groupId>org.springframework</groupId>
+			<artifactId>spring-context</artifactId>
+			<version>4.3.13.RELEASE</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.apache.tika</groupId>
 			<artifactId>tika-core</artifactId>
